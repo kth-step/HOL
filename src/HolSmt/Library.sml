@@ -16,10 +16,11 @@ struct
      3 - also diagnostic messages that are potentially lengthy (e.g., terms,
          models, proofs)
      4 - moreover, temporary files (for communication with the SMT solver) are
-         not removed after solver invocation *)
+         not removed after solver invocation
+     5 - all of the above, plus trace and debug information *)
   val trace = ref 2
 
-  val _ = Feedback.register_trace ("HolSmtLib", trace, 4)
+  val _ = Feedback.register_trace ("HolSmtLib", trace, 5)
 
   (***************************************************************************)
   (* I/O, parsing                                                            *)
