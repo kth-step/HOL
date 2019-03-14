@@ -4,6 +4,8 @@
 
 structure SmtLib = struct
 
+  val checkSatStatement = ref "(check-sat)"
+
 local
 
   (* FIXME: We translate into a fictitious SMT-LIB logic AUFBVNIRA
@@ -587,7 +589,8 @@ local
       "Copyright (c) 2011 Tjark Weber. All rights reserved.|)\n",
       "(set-info :smt-lib-version 2.0)\n"
     ] @ smtlibs @ [
-      "(check-sat)\n"
+      (*"(check-sat)\n"*)
+      (!checkSatStatement) ^ "\n"
     ])
   end
 
