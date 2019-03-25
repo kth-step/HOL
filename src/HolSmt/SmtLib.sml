@@ -525,11 +525,10 @@ local
             val (tydict, (rngdecls, rngty)) = translate_type (tydict, rngty)
             (* invent new name for 'rator' *)
             val name = tm_prefix ^ Int.toString (Redblackmap.numItems tmdict)
-              ^ (if !Library.trace < 4 then "" else
-              (* add a readeable name, since the temp file ins't deleted *)
-              "_" ^ (String.translate
+              (* add a human-readeable prefix *)
+              ^ "_" ^ (String.translate
                 (fn c => if Char.isAlphaNum c then String.str c else "_")
-                ((fst o dest_var) rator)));
+                ((HolKernel.fst o HolKernel.dest_var) rator));
             val _ = if !Library.trace > 0 andalso Term.is_const rator then
               WARNING "translate_term"
                 ("uninterpreted constant " ^ Hol_pp.term_to_string rator)
