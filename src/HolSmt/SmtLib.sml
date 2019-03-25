@@ -566,7 +566,7 @@ local
      arguments to the term.  (Because SMT-LIB is first-order,
      partially applied functions are mapped to different SMT-LIB
      identifiers, depending on the number of actual arguments.) *)
-  fun goal_to_SmtLib_aux (ts, t)
+  fun goal_to_SmtLib_aux negate (ts, t)
     : ((Type.hol_type, string) Redblackmap.dict *
       (Term.term * int, string) Redblackmap.dict) * string list =
   let
@@ -574,9 +574,10 @@ local
     val tmdict = Redblackmap.mkDict
       (Lib.pair_compare (Term.compare, Int.compare))
     val bounds = Redblackmap.mkDict Term.compare
+    val concl = if negate then boolSyntax.mk_neg t else t
     val (acc, smtlibs) = Lib.foldl_map
       (fn (acc, tm) => translate_term (acc, (bounds, tm)))
-      ((tydict, tmdict), ts @ [boolSyntax.mk_neg t])
+      ((tydict, tmdict), ts @ [concl])
     (* we choose to intertwine declarations and assertions (for no
        particular reason; an alternative would be to emit all
        declarations before all assertions) *)
@@ -597,10 +598,13 @@ local
 in
 
   val goal_to_SmtLib =
-    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o goal_to_SmtLib_aux
+    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o (goal_to_SmtLib_aux true)
 
   val goal_to_SmtLib_with_get_proof =
-    Lib.apsnd (fn xs => xs @ ["(get-proof)\n", "(exit)\n"]) o goal_to_SmtLib_aux
+    Lib.apsnd (fn xs => xs @ ["(get-proof)\n", "(exit)\n"]) o (goal_to_SmtLib_aux true)
+
+  val goal_to_SmtLib_unnegated =
+    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o (goal_to_SmtLib_aux false)
 
   (* eliminates some HOL terms that are not supported by the SMT-LIB
      translation *)
