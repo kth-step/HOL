@@ -222,15 +222,18 @@ in
       {n: int, make: term -> 'a -> term, dest: term -> exn -> term -> 'b}
       thy name =
       let
-         val ERR = Feedback.mk_HOL_ERR (thy ^ "Syntax")
+         val origin_structure = (thy ^ "Syntax")
+         val ERR = Feedback.mk_HOL_ERR origin_structure
+         val wrap_exn = Feedback.wrap_exn origin_structure
          val tm = Term.prim_mk_const {Name = name, Thy = thy}
          val () =
             ignore (List.length (args tm) = n
-                    orelse raise ERR "systax_fns" "bad number of arguments")
+                    orelse raise ERR "syntax_fns"
+                                     ("bad number of arguments (" ^ name ^ ")"))
          val d = dest tm (ERR ("dest_" ^ name) "")
       in
          (tm,
-          fn v => Lib.with_exn (make tm) v (ERR ("mk_" ^ name) ""): term,
+          fn v => (make tm v) handle e => raise wrap_exn ("mk_" ^ name) e,
           d: term -> 'b,
           can d)
       end

@@ -4,6 +4,8 @@
 
 structure SmtLib = struct
 
+  val checkSatStatement = ref "(check-sat)"
+
 local
 
   (* FIXME: We translate into a fictitious SMT-LIB logic AUFBVNIRA
@@ -23,6 +25,45 @@ local
   val ERR = Feedback.mk_HOL_ERR "SmtLib"
   val WARNING = Feedback.HOL_WARNING "SmtLib"
 
+  (* SMT-LIB type and function names are uniformly generated as "tN"
+     and "vN", respectively, where N is a number. Prefixes must be
+     distinct. *)
+
+  val ty_prefix = "t"  (* for types *)
+  val tm_prefix = "v"  (* for terms *)
+  val bv_prefix = "b"  (* for bound variables *)
+
+  (* returns an updated accumulator, a (possibly empty) list of
+     SMT-LIB type declarations, and the SMT-LIB representation of the
+     given type *)
+  fun translate_type_ types (tydict, ty) =
+  let
+    val name = Lib.tryfind (fn (_, f) => f ty)
+        (TypeNet.match (types, ty)) (* may fail *)
+      handle Feedback.HOL_ERR _ =>
+        Redblackmap.find (tydict, ty)
+  in
+    (tydict, ([], name))
+  end
+  handle Redblackmap.NotFound =>
+    (* uninterpreted types *)
+    let
+      val name = ty_prefix ^ Int.toString (Redblackmap.numItems tydict)
+      val decl = "(declare-sort " ^ name ^ " 0)\n"
+    in
+      if !Library.trace > 0 andalso Type.is_type ty then
+        WARNING "translate_type"
+          ("uninterpreted type " ^ Hol_pp.type_to_string ty)
+      else
+        ();
+      if !Library.trace > 2 then
+        Feedback.HOL_MESG ("HolSmtLib (SmtLib): inventing name '" ^ name ^
+          "' for HOL type '" ^ Hol_pp.type_to_string ty ^ "'")
+      else
+        ();
+      (Redblackmap.insert (tydict, ty, name), ([decl], name))
+    end
+
   (* (HOL type, a function that maps the type to its SMT-LIB sort name) *)
   val builtin_types = List.foldl
     (fn ((ty, x), net) => TypeNet.insert (net, ty, x)) TypeNet.empty [
@@ -33,6 +74,30 @@ local
     (wordsSyntax.mk_word_type Type.alpha, fn ty =>
       "(_ BitVec " ^ Arbnum.toString
         (fcpSyntax.dest_numeric_type (wordsSyntax.dest_word_type ty)) ^ ")")
+   ]
+  (* add array types *)
+  (* only 1D arrays are supported, but that should be very easy to fix *)
+  val builtin_types = List.foldl
+    (fn ((ty, x), net) => TypeNet.insert (net, ty, x)) builtin_types [
+    (Parse.Type `:'a -> 'b`, fn ty =>
+      let
+        val tydict = Redblackmap.mkDict Type.compare;
+        fun ty_to_smt ty =
+          let
+            val (_, (decls, name)) = translate_type_ builtin_types (tydict, ty);
+          in
+            if List.length decls > 0 then
+              raise ERR "<builtin_types>" (
+                "uninterpreted types in Arrays aren't supported: "
+                ^ (Hol_pp.type_to_string ty))
+            else name
+          end;
+        val array_types = (Lib.snd o Type.dest_type) ty;
+        val smt_types = List.map ty_to_smt array_types;
+      in
+        "(Array " ^ (String.concatWith " " smt_types) ^ ")"
+      end
+    ) (* end of: Type `:'a -> 'b` *)
    ]
 
   val apfst_K = Lib.apfst o Lib.K
@@ -313,47 +378,13 @@ local
     (wordsSyntax.word_lt_tm, apfst_fixed_width "bvslt"),
     (wordsSyntax.word_le_tm, apfst_fixed_width "bvsle"),
     (wordsSyntax.word_gt_tm, apfst_fixed_width "bvsgt"),
-    (wordsSyntax.word_ge_tm, apfst_fixed_width "bvsge")
+    (wordsSyntax.word_ge_tm, apfst_fixed_width "bvsge"),
+    (* arrays *)
+    (smtArraySyntax.store_tm, apfst_K "store"),
+    (smtArraySyntax.select_tm, apfst_K "select")
   ]
 
-  (* SMT-LIB type and function names are uniformly generated as "tN"
-     and "vN", respectively, where N is a number. Prefixes must be
-     distinct. *)
-
-  val ty_prefix = "t"  (* for types *)
-  val tm_prefix = "v"  (* for terms *)
-  val bv_prefix = "b"  (* for bound variables *)
-
-  (* returns an updated accumulator, a (possibly empty) list of
-     SMT-LIB type declarations, and the SMT-LIB representation of the
-     given type *)
-  fun translate_type (tydict, ty) =
-  let
-    val name = Lib.tryfind (fn (_, f) => f ty)
-        (TypeNet.match (builtin_types, ty)) (* may fail *)
-      handle Feedback.HOL_ERR _ =>
-        Redblackmap.find (tydict, ty)
-  in
-    (tydict, ([], name))
-  end
-  handle Redblackmap.NotFound =>
-    (* uninterpreted types *)
-    let
-      val name = ty_prefix ^ Int.toString (Redblackmap.numItems tydict)
-      val decl = "(declare-sort " ^ name ^ " 0)\n"
-    in
-      if !Library.trace > 0 andalso Type.is_type ty then
-        WARNING "translate_type"
-          ("uninterpreted type " ^ Hol_pp.type_to_string ty)
-      else
-        ();
-      if !Library.trace > 2 then
-        Feedback.HOL_MESG ("HolSmtLib (SmtLib): inventing name '" ^ name ^
-          "' for HOL type '" ^ Hol_pp.type_to_string ty ^ "'")
-      else
-        ();
-      (Redblackmap.insert (tydict, ty, name), ([decl], name))
-    end
+  val translate_type = translate_type_ builtin_types;
 
   (* SMT-LIB is first-order.  Thus, functions can only be applied to
      arguments of base type, but not to arguments of function type;
@@ -396,6 +427,12 @@ local
           (Redblackmap.insert (bounds, v, name), name)
         end
     val tm_has_base_type = not (Lib.can Type.dom_rng (Term.type_of tm))
+    val _ = if !Library.trace > 4 then
+        print ("has_base_type ``" ^ (Hol_pp.term_to_string tm)
+          ^ "``: " ^ (Bool.toString tm_has_base_type) ^ "\n")
+      else
+        ();
+    val tm_is_store = smtArraySyntax.is_store tm
   in
     (* binders *)
     let
@@ -453,9 +490,10 @@ local
       val (rator, rands) = boolSyntax.strip_comb tm
     in
       (* translate the rator as a built-in symbol (applied to its rands); only
-         do this if 'tm' has base type *)
-      (if tm_has_base_type then
-        builtin_symbol (rator, rands)
+         do this if 'tm' has base type, or if it is a store, since arrays
+         (the return type of a store) doesn't have base type *)
+      (if tm_has_base_type orelse tm_is_store then
+          builtin_symbol (rator, rands)
       else
         raise ERR "translate_term" "not first-order")  (* handled below *)
       handle Feedback.HOL_ERR _ =>
@@ -489,6 +527,10 @@ local
             val (tydict, (rngdecls, rngty)) = translate_type (tydict, rngty)
             (* invent new name for 'rator' *)
             val name = tm_prefix ^ Int.toString (Redblackmap.numItems tmdict)
+              (* add a human-readeable prefix *)
+              ^ "_" ^ (String.translate
+                (fn c => if Char.isAlphaNum c then String.str c else "_")
+                ((HolKernel.fst o HolKernel.dest_var) rator));
             val _ = if !Library.trace > 0 andalso Term.is_const rator then
               WARNING "translate_term"
                 ("uninterpreted constant " ^ Hol_pp.term_to_string rator)
@@ -524,7 +566,7 @@ local
      arguments to the term.  (Because SMT-LIB is first-order,
      partially applied functions are mapped to different SMT-LIB
      identifiers, depending on the number of actual arguments.) *)
-  fun goal_to_SmtLib_aux (ts, t)
+  fun goal_to_SmtLib_aux negate (ts, t)
     : ((Type.hol_type, string) Redblackmap.dict *
       (Term.term * int, string) Redblackmap.dict) * string list =
   let
@@ -532,9 +574,10 @@ local
     val tmdict = Redblackmap.mkDict
       (Lib.pair_compare (Term.compare, Int.compare))
     val bounds = Redblackmap.mkDict Term.compare
+    val concl = if negate then boolSyntax.mk_neg t else t
     val (acc, smtlibs) = Lib.foldl_map
       (fn (acc, tm) => translate_term (acc, (bounds, tm)))
-      ((tydict, tmdict), ts @ [boolSyntax.mk_neg t])
+      ((tydict, tmdict), ts @ [concl])
     (* we choose to intertwine declarations and assertions (for no
        particular reason; an alternative would be to emit all
        declarations before all assertions) *)
@@ -547,17 +590,21 @@ local
       "Copyright (c) 2011 Tjark Weber. All rights reserved.|)\n",
       "(set-info :smt-lib-version 2.0)\n"
     ] @ smtlibs @ [
-      "(check-sat)\n"
+      (*"(check-sat)\n"*)
+      (!checkSatStatement) ^ "\n"
     ])
   end
 
 in
 
   val goal_to_SmtLib =
-    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o goal_to_SmtLib_aux
+    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o (goal_to_SmtLib_aux true)
 
   val goal_to_SmtLib_with_get_proof =
-    Lib.apsnd (fn xs => xs @ ["(get-proof)\n", "(exit)\n"]) o goal_to_SmtLib_aux
+    Lib.apsnd (fn xs => xs @ ["(get-proof)\n", "(exit)\n"]) o (goal_to_SmtLib_aux true)
+
+  val goal_to_SmtLib_unnegated =
+    Lib.apsnd (fn xs => xs @ ["(exit)\n"]) o (goal_to_SmtLib_aux false)
 
   (* eliminates some HOL terms that are not supported by the SMT-LIB
      translation *)
@@ -573,7 +620,9 @@ in
         [integerTheory.INT_MIN, integerTheory.INT_MAX, INT_ABS] THEN
       Library.WORD_SIMP_TAC THEN
       Library.SET_SIMP_TAC THEN
-      Tactic.BETA_TAC
+      Tactic.BETA_TAC THEN
+      SIMP_TAC pureSimps.pure_ss
+        [smtArrayTheory.apply_to_select_REWR, smtArrayTheory.update_to_store_REWR]
     end
 
 end  (* local *)
