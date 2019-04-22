@@ -79,7 +79,7 @@ local
   (* only 1D arrays are supported, but that should be very easy to fix *)
   val builtin_types = List.foldl
     (fn ((ty, x), net) => TypeNet.insert (net, ty, x)) builtin_types [
-    (Parse.Type `:'a -> 'b`, fn ty =>
+    (Parse.Type `:'a |-> 'b`, fn ty =>
       let
         val tydict = Redblackmap.mkDict Type.compare;
         fun ty_to_smt ty =
@@ -97,7 +97,7 @@ local
       in
         "(Array " ^ (String.concatWith " " smt_types) ^ ")"
       end
-    ) (* end of: Type `:'a -> 'b` *)
+    ) (* end of: Type `:'a |-> 'b` *)
    ]
 
   val apfst_K = Lib.apfst o Lib.K
