@@ -65,14 +65,10 @@ structure Z3 = struct
             parse_Z3_version outfile
           end
 
-  val doproofs =
-      if String.sub(Z3version, 0) = #"2" then true
-      else if String.sub(Z3version, 0) = #"0" then false
-      else
-        (Feedback.HOL_MESG ("Can't replay proofs with Z3 v"^Z3version); false)
+  val is_Z3_v2 = String.sub(Z3version, 0) = #"2"
 
   (* Z3 (Linux/Unix), SMT-LIB file format, with proofs *)
-  val Z3_SMT_Prover = if not doproofs then Z3_SMT_Oracle else
+  val Z3_SMT_Prover =
     mk_Z3_fun "Z3_SMT_Prover"
       (fn goal =>
         let
@@ -81,7 +77,7 @@ structure Z3 = struct
         in
           (((goal, validation), ty_tm_dict), strings)
         end)
-      " PROOF_MODE=2 -smt2 -file:"
+      ((if is_Z3_v2 then " PROOF_MODE=2" else " proof=true") ^ " -smt2 -file:")
       (fn ((goal, validation), (ty_dict, tm_dict)) =>
         fn outfile =>
           let

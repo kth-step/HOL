@@ -345,6 +345,9 @@ local
   let
     val _ = Library.expect_token "(" (get_token ())
     val head = get_token ()
+    (* Z3 4.x formats proofs as `((proof ...))` *)
+    val (head, rpars) = if head = "("
+      then (get_token (), rpars + 1) else (head, rpars)
   in
     if head = "let" then
       let
@@ -352,6 +355,11 @@ local
       in
         parse_proof get_token (tydict, tmdict, proof) (rpars + 1)
       end
+    else if head = "proof" then
+      (* This with a "quickfix" to handle the "new" proof format, "new"
+       * being between Z3 2.13 and Z3 4.x. Basically, the proof is now
+       * contained inside a `proof` statement that we just ignore. *)
+      parse_proof get_token (tydict, tmdict, proof) (rpars + 1)
     else if head = "error" then (
       (* some (otherwise valid) proofs are preceded by an error message,
          which we simply ignore *)
