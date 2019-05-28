@@ -50,6 +50,10 @@ structure Z3 = struct
       val instrm = TextIO.openIn fname
       val s = TextIO.inputAll instrm before TextIO.closeIn instrm
       val tokens = String.tokens Char.isSpace s
+      (* Print Z3 version *)
+      val not_nl = (fn c => c <> #"\n")
+      val no_nl = String.implode (List.filter not_nl (String.explode s))
+      val _ = Feedback.HOL_MESG ("HolSmtLib: Using " ^ no_nl ^ ".")
     in
       List.nth (tokens, 2)
     end
