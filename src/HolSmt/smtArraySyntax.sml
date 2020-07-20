@@ -3,6 +3,8 @@ struct
 
   open HolKernel Parse boolLib;  local open smtArrayTheory in end;
 
+  val ERR = Feedback.mk_HOL_ERR "smtArraySyntax"
+
   val store_tm = prim_mk_const{Name="store", Thy="smtArray"}
   val select_tm = prim_mk_const{Name="select", Thy="smtArray"};
 
