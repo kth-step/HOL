@@ -121,6 +121,8 @@ structure Z3 = struct
                 (* parse the proof and check it in HOL *)
                 val proof = Z3_ProofParser.parse_stream (ty_dict, tm_dict)
                   instream
+                  handle err => raise Feedback.mk_HOL_ERR "Z3" "Z3_SMT_Prover"
+                    ("failed to parse Z3 proof: [" ^ (exnName err) ^ "] " ^ (exnMessage err))
                 val _ = TextIO.closeIn instream
                 val thm = Z3_ProofReplay.check_proof proof
                 val (As, g) = goal
