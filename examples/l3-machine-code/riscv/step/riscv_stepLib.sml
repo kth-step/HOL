@@ -339,6 +339,8 @@ in
     let
 (*
   val v = bitstringSyntax.bitstring_of_hexstring "340110F3" (* CSRRW *)
+  val v = bitstringSyntax.bitstring_of_hexstring "340120F3" (* CSRRS *)
+  val v = bitstringSyntax.bitstring_of_hexstring "340130F3" (* CSRRC *)
 
   Example of instruction working:
   val v = bitstringSyntax.bitstring_of_hexstring "00E10423"
