@@ -550,6 +550,7 @@ val s = ``s:riscv_state``
 val rd0 = ``rd = 0w: word5``
 val bare = ``(^s.c_MCSR ^s.procID).mstatus.VM = 0w``
 val archbase = ``(^s.c_MCSR ^s.procID).mcpuid.ArchBase``
+val privilege_level = ``(^s.c_MCSR ^s.procID).mstatus.MPRV``
 val shift = ``~((^archbase = 0w) /\ word_bit 5n (imm: word6))``
 val aligned = ``aligned 2 (^s.c_PC ^s.procID)``
 val aligned_d =
@@ -560,7 +561,7 @@ local
   val cond_updates = utilsLib.mk_cond_update_thms [``:riscv_state``]
   val datatype_rwts =
     utilsLib.datatype_rewrites true "riscv"
-      ["riscv_state", "VM_Mode", "Architecture"]
+      ["riscv_state", "VM_Mode", "Architecture", "accessType", "Privilege"]
   fun riscv_thms thms =
     thms @ cond_updates @ datatype_rwts @
     [wordsTheory.WORD_EXTRACT_ZERO2, wordsTheory.ZERO_SHIFT,
@@ -765,6 +766,31 @@ val thm = Q.prove(
 
 val rawWriteData1 = REWRITE_RULE [thm] rawWriteData1
 
+
+(* ------------------------------------------------------------------------
+   CSR Rewrites
+   ------------------------------------------------------------------------ *)
+
+
+val CSR = EV [CSR_def] [] [] ``CSR n``
+
+val csrRW = EV [csrRW_def] [] [] ``csrRW w``
+
+val csrPR = EV [csrPR_def] [] [] ``csrPR w``
+
+val CSRMap = EV [CSRMap_def] [] [] ``CSRMap n s``
+
+val checkCSROp = EV [checkCSROp_def, is_CSR_defined_def] [] [] ``checkCSROp (csr, rs1, a)``
+
+val check_CSR_access = EV [check_CSR_access_def, privLevel_def] [] [] ``check_CSR_access (rw,pr,p,a)``
+
+val curPrivilege = EV [curPrivilege_def, privilege_def, MCSR_def] [] [] ``curPrivilege ()``
+
+val writeCSR = ev [writeCSR_def, write'CSR_def, write'Delta_def, Delta_def] [] [] ``writeCSR (csr, v)`` |> hd
+(*
+val ev = utilsLib.STEP (riscv_thms, s)
+val write'CSRMap = ev [write'CSRMap_def] [] []  ``write'CSRMap (v, csr) s``
+*)
 (* ------------------------------------------------------------------------
    Instruction Rewrites
    ------------------------------------------------------------------------ *)
@@ -790,7 +816,9 @@ in
           ([write'GPR0], n ^ "_NOP")
         else
           ([write'GPR], n)
-      val thms = DB.fetch "riscv" (name ^ "_def") :: write @ read
+      (* These rewrites should be done for all CSR instructions *)
+      val csr = if Lib.mem n ["CSRRW", "CSRRI", "CSRRC"] then [checkCSROp, check_CSR_access, curPrivilege, CSR, csrRW, csrPR] else []
+      val thms = DB.fetch "riscv" (name ^ "_def") :: write @ read @ csr
     in
       case ev (thms @ l) avoid [] (Parse.Term ([QUOTE name] @ args)) of
          [th] => utilsLib.save_thms n [hyp_eq_rule th]
@@ -890,6 +918,12 @@ val SD  = store [[``^archbase <> 0w``, aligned_d]] "SD"
 val SW  = store [] "SW"
 val SH  = store [] "SH"
 val SB  = store [] "SB"
+
+val csrinst = class `(rs, rs1, csr)`
+
+val CSRRW_M = csrinst [[``^privilege_level = 3w``, ``^archbase <> 0w``]] "CSRRW"
+val CSRRS = csrinst [] "CSRRS"
+val CSRRC = csrinst [] "CSRRC"
 
 (* ------------------------------------------------------------------------ *)
 
