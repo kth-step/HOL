@@ -906,7 +906,7 @@ bool is_CSR_defined(csr::creg) =
  or (csr >= 0x980 and csr <= 0x982 and in32BitMode())
 
     -- machine-mode
- or (csr >= 0xF00 and csr <= 0xF01) or csr == 0xF10
+ or (csr >= 0xF00 and csr <= 0xF01) or csr == 0xF14
  or (csr >= 0x300 and csr <= 0x302) or csr == 0x304 or csr == 0x321
  or  csr == 0x701 or (csr == 0x741 and in32BitMode())
  or (csr >= 0x340 and csr <= 0x344)
@@ -985,7 +985,7 @@ component CSRMap(csr::creg) :: regType
         -- machine information registers
         case 0xF00  => c_MCSR(procID).&mcpuid
         case 0xF01  => c_MCSR(procID).&mimpid
-        case 0xF10  => c_MCSR(procID).mhartid
+        case 0xF14  => c_MCSR(procID).mhartid
 
         -- machine trap setup
         case 0x300  => c_MCSR(procID).&mstatus
@@ -1191,7 +1191,7 @@ string csrName(csr::creg) =
       -- machine information registers
       case 0xF00  => "mcpuid"
       case 0xF01  => "mimpid"
-      case 0xF10  => "mhartid"
+      case 0xF14  => "mhartid"
 
       -- machine trap setup
       case 0x300  => "mstatus"
