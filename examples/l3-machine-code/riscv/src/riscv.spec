@@ -423,7 +423,7 @@ record MachineCSR
   mscratch      :: regType      -- trap handling
   mepc          :: regType
   mcause        :: mcause
-  mbadaddr      :: regType
+  mtval         :: regType
   mip           :: mip
 
   mbase         :: regType      -- protection and translation
@@ -451,7 +451,7 @@ record HypervisorCSR
   hscratch      :: regType      -- trap handling
   hepc          :: regType
   hcause        :: mcause
-  hbadaddr      :: regType
+  htval         :: regType
 }
 
 -- Supervisor-Level CSRs
@@ -487,7 +487,7 @@ record SupervisorCSR
   sscratch      :: regType      -- trap handling
   sepc          :: regType
   scause        :: mcause
-  sbadaddr      :: regType
+  stval         :: regType
   -- sip :: sip is a projection of mip :: mip
 
   sptbr         :: regType      -- memory protection and translation
@@ -947,7 +947,7 @@ component CSRMap(csr::creg) :: regType
         case 0x140  => c_SCSR(procID).sscratch
         case 0x141  => c_SCSR(procID).sepc
         case 0xD42  => c_SCSR(procID).&scause
-        case 0xD43  => c_SCSR(procID).sbadaddr
+        case 0xD43  => c_SCSR(procID).stval
         case 0x144  => &lift_mip_sip(c_MCSR(procID).mip)
 
         -- supervisor protection and translation
@@ -976,7 +976,7 @@ component CSRMap(csr::creg) :: regType
         case 0x240  => c_HCSR(procID).hscratch
         case 0x241  => c_HCSR(procID).hepc
         case 0x242  => c_HCSR(procID).&hcause
-        case 0x243  => c_HCSR(procID).hbadaddr
+        case 0x243  => c_HCSR(procID).htval
 
         -- hypervisor read/write shadow of supervisor read-only registers
         case 0xA01  => clock + c_SCSR(procID).stime_delta
@@ -1002,7 +1002,7 @@ component CSRMap(csr::creg) :: regType
         case 0x340  => c_MCSR(procID).mscratch
         case 0x341  => c_MCSR(procID).mepc
         case 0x342  => c_MCSR(procID).&mcause
-        case 0x343  => c_MCSR(procID).mbadaddr
+        case 0x343  => c_MCSR(procID).mtval
         case 0x344  => c_MCSR(procID).&mip
 
         -- machine protection and translation
@@ -1057,7 +1057,7 @@ component CSRMap(csr::creg) :: regType
         -- supervisor trap handling
         case 0x140  => c_SCSR(procID).sscratch          <- value
         case 0x141  => c_SCSR(procID).sepc              <- (value && SignExtend(0b100`3))  -- no 16-bit instr support
-        -- scause, sbadaddr are SRO
+        -- scause, stval are SRO
         -- sip back-projects to mip
         case 0x144  => c_MCSR(procID).mip               <- lower_sip_mip(sip(value), c_MCSR(procID).mip)
 
@@ -1096,7 +1096,7 @@ component CSRMap(csr::creg) :: regType
         case 0x340  => c_MCSR(procID).mscratch          <- value
         case 0x341  => c_MCSR(procID).mepc              <- (value && SignExtend(0b100`3))  -- no 16-bit instr support
         case 0x342  => c_MCSR(procID).mcause            <- mcause(value)
-        case 0x343  => c_MCSR(procID).mbadaddr          <- value
+        case 0x343  => c_MCSR(procID).mtval             <- value
         case 0x344  => c_MCSR(procID).mip               <- mip(value)
 
         -- machine protection and translation
@@ -1153,7 +1153,7 @@ string csrName(csr::creg) =
       case 0x140  => "sscratch"
       case 0x141  => "sepc"
       case 0xD42  => "scause"
-      case 0xD43  => "sbadaddr"
+      case 0xD43  => "stval"
       case 0x144  => "mip"
 
       -- supervisor protection and translation
@@ -1182,7 +1182,7 @@ string csrName(csr::creg) =
       case 0x240  => "hscratch"
       case 0x241  => "hepc"
       case 0x242  => "hcause"
-      case 0x243  => "hbadaddr"
+      case 0x243  => "htval"
 
       -- hypervisor read/write shadow of supervisor read-only registers
       case 0xA01  => "stime"
@@ -1208,7 +1208,7 @@ string csrName(csr::creg) =
       case 0x340  => "mscratch"
       case 0x341  => "mepc"
       case 0x342  => "mcause"
-      case 0x343  => "mbadaddr"
+      case 0x343  => "mtval"
       case 0x344  => "mip"
 
       -- machine protection and translation
@@ -1564,7 +1564,7 @@ unit takeTrap(intr::bool, ec::exc_code, epc::regType, badaddr::vAddr option, toP
     ; SCSR.scause.EC    <- ec
     ; SCSR.sepc         <- epc
     ; when IsSome(badaddr)
-      do SCSR.sbadaddr  <- ValOf(badaddr)
+      do SCSR.stval  <- ValOf(badaddr)
 
     ; PC    <- SCSR.stvec
     }
@@ -1574,7 +1574,7 @@ unit takeTrap(intr::bool, ec::exc_code, epc::regType, badaddr::vAddr option, toP
     ; MCSR.mcause.EC    <- ec
     ; MCSR.mepc         <- epc
     ; when IsSome(badaddr)
-      do MCSR.mbadaddr  <- ValOf(badaddr)
+      do MCSR.mtval  <- ValOf(badaddr)
 
     ; PC    <- MCSR.mtvec + ([privLevel(fromP)]::regType) * 0x40
     }
@@ -4078,7 +4078,7 @@ define System > ERET   =
 -----------------------------------
 define System > MRTS   =
 { SCSR.scause       <- MCSR.mcause
-; SCSR.sbadaddr     <- MCSR.mbadaddr
+; SCSR.stval        <- MCSR.mtval
 ; SCSR.sepc         <- MCSR.mepc
 
 ; MCSR.mstatus.MPRV <- privLevel(Supervisor)
